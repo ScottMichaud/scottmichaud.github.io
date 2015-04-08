@@ -8,6 +8,7 @@
   <script src="classes/boid.js"></script>
   <script src="webglstuff.js"></script>
   <script src="main.js"></script>
+  <script src="util.js"></script>
   <link rel="stylesheet" type="text/css" href="style.css">
   
   <script type="x-shader/x-vertex" id="vtxRainPoints">
@@ -30,79 +31,105 @@
     }
   </script>
   <script type="text/x-opencl" id="clMixSamples">
-    __kernel void clMixSamples(__global float3* vtx,
-                             __global float2* dst,
-                             __global float* sounds,
-                             float2 obs_loc,
-                             float2 obs_dir,
-                             uint numVtx,
-                             uint numSamples)
+    //typedef struct {
+    //  float2 pos;
+    //  int sampleStart;
+    //  int sampleEnd;
+    //  int samplePosition;
+    //} stParticle;
+    
+    // Particle Structure:
+    //
+    // pos: x, y coordinate of map. 0 to 1. (8 bytes)
+    //
+    // sampleStart: Added for multiple sounds, where this sound starts. (4 bytes)
+    // This can handle 13.5 hours of 44.1 kHz samples, per batch.
+    //
+    // sampleEnd: Stop at this index number. Same as above. (4 bytes).
+    // Wish I was using a uint32 but JavaScript doesn't like those.
+    // 13.5 hours is pretty good though.
+    //
+    // samplePosition: If negative, delay. If positive or 0, number of samples
+    // after sampleStart for start of this batch. (4 bytes).
+    //
+    // Total: 8 + 4 + 4 + 4 = 20 Bytes per struct
+    
+    __kernel void clMixSamples(__global float2* f_particles,
+                             __global int3* i_particles,
+                             __global float2* output,
+                             __global float* soundCues,
+                             float2 obsLocation,
+                             float2 obsDirection,
+                             int numParticles,
+                             int numOutput)
   {
-      //dst is float2 because it's stereo.
+      //output is float2 because it's stereo.
+      //numOutput is the number of samples in ONE channel of the resulting
+      //stream. Thus, because this is stereo, mentally double.
 
       int i = get_global_id(0); //Sample number
-
-      //Life (vtx.s2) is 1 through 0, which is 500ms.
-      //That is how far through the sounds array (plus offset if we'd have more
-      //than a single sample) we need to pick from.
-      //Don't need to synchronize with WebAudio clock.
-
-      float2 output = (float2)(0.0f, 0.0f);
-      float2 obs_right = (float2)(-obs_dir.y, obs_dir.x);
-
-      for (int itr=0; itr < numVtx; itr++)
+      if (i >= numOutput)
       {
-          //Assuming 44.1KHz Sample Rate and half-second life
-          //Get entry number of source audio buffer array
-          int src_pos = (int)(vtx[itr].z * 22050.0f);
-          src_pos = 22050 - src_pos;
-          
-          float src_sample = 0.0f;
-          
-          if (src_pos < (numSamples + i))
-          {
-            //Get the sample of that index
-            src_sample = sounds[src_pos + i];
-            //src_sample = clamp(src_sample, -1.0f, 1.0f);
-          }
-          else
-          {
-            src_sample = 0.0f;
-          }
-
-          //Account for inverse-square falloff
-          float2 src_loc = (float2)(vtx[itr].x, vtx[itr].y);
-          float falloff = distance(obs_loc, src_loc);
-          falloff = falloff * falloff;
-
-          //Account for stereo
-          float2 dir = src_loc - obs_loc;
-
-          //Get value in right direction. 1 for full-right, 0 for full-left
-          float r_balance = dot(dir, obs_right);
-          r_balance += 1.0f;
-          r_balance = r_balance * 0.5f;
-          float r_src = src_sample * r_balance;
-          output.y += (r_src / falloff);
-
-          //Get value in left direction. 0 for full-right, 1 for full-left
-          float l_balance = dot(dir, -obs_right);
-          l_balance += 1.0f;
-          l_balance = l_balance * 0.5f;
-          float l_src = src_sample * l_balance;
-          output.x += (l_src / falloff);
+          return;
       }
 
-      dst[i] = 60.f * output;
+      float2 OutputValue = (float2)(0.0f, 0.0f);
+      float2 obsRight = (float2)(-obsDirection.y, obsDirection.x);
+      //It's normalized in boid.js, but what's one op among friends?
+      obsRight = normalize(obsRight);
+      float2 CurrentDirection = (float2)(0.0f, 0.0f);
+      int CurrentPosition = 0;
+      float CurrentSample = 0.0f;
+      float SourceDistance = 0.0f;
+      float CurrentGain = 0.0f;
+      float CurrentLeft = 0.0f;
+      float CurrentRight = 0.0f;
+      
+      for (int itr=0; itr < numParticles; itr++)
+      {
+          CurrentPosition = i_particles[itr].z + i;
+          
+          if ((CurrentPosition >= i_particles[itr].x) &&
+              (CurrentPosition < i_particles[itr].y))
+          {
+              CurrentSample = soundCues[CurrentPosition] * 1000.f;
+          
+              SourceDistance = distance(obsLocation, f_particles[itr]);
+              SourceDistance = clamp(SourceDistance, 50.f, 1000.f);
+              CurrentGain = 50.f / SourceDistance;
+
+              CurrentDirection = f_particles[itr] - obsLocation;
+              CurrentDirection = normalize(CurrentDirection);
+
+              CurrentLeft = dot(CurrentDirection, -obsRight);
+              CurrentLeft += 1.0f;
+              CurrentLeft *= 0.5f;
+              CurrentLeft *= CurrentSample;
+              CurrentLeft *= CurrentGain;
+
+              CurrentRight = dot(CurrentDirection, obsRight);
+              CurrentRight += 1.0f;
+              CurrentRight *= 0.5f;
+              CurrentRight *= CurrentSample;
+              CurrentRight *= CurrentGain;
+
+              OutputValue.x += CurrentLeft;
+              OutputValue.y += CurrentRight;
+          }
+      }
+      
+      //output[i] = (float2)(0.01f, 0.01f);
+      //output[i] = (float2)(CurrentLeft, CurrentRight);
+      output[i] = OutputValue;
   }
   </script>
 </head>
 <body>
   <div id="top">
     <div id="upperOptions">
-      <input id="typeWebAudio" type="radio" name="apiType" value="webaudio" onclick="app.noOffloadSelected();" autocomplete="off">
+      <input id="typeWebAudio" type="radio" name="apiType" value="webaudio" onclick="app.selectNoOffload();" autocomplete="off">
       <label for="webaudio">No Offloading</label>
-      <input id="typeWebCL" type="radio" name="apiType" value="webcl" onclick="app.webCLOffloadSelected();" autocomplete="off">
+      <input id="typeWebCL" type="radio" name="apiType" value="webcl" onclick="app.selectWebCL();" autocomplete="off">
       <label for="webcl">WebCL Offload</label>
       <select name="webclDevice" id="webclDeviceSelector">
       </select>
@@ -115,7 +142,7 @@
   </div>
   <div id="main">
     <canvas id="glPoints"></canvas>
-    <canvas id="map"></canvas>
+    <canvas id="boid"></canvas>
   </div>
 </body>
 </html>
