@@ -160,44 +160,6 @@ app.canvasLMBUp = function (e) {
   }
 };
 
-app.parseInputParticleCount = function () {
-  "use strict";
-  var i,
-    value,
-    isValid;
-  
-  value = document.getElementById("inputParticleCount").value;
-  isValid = true;
-  
-  //Only allow direct integer input.
-  //If not an integer, use previous amount.
-  for (i = 0; i < value.length; i += 1) {
-    switch (value.charAt(i)) {
-      case "0":
-      case "1":
-      case "2":
-      case "3":
-      case "4":
-      case "5":
-      case "6":
-      case "7":
-      case "8":
-      case "9":
-        break;
-      default:
-        isValid = false;
-    }
-  }
-  
-  if (value.length < 1) {
-    isValid = false;
-  }
-  
-  if (isValid) {
-    app.rain.max = window.parseInt(value, 10);
-  }
-};
-
 app.beginPress = function () {
   "use strict";
   
@@ -206,9 +168,6 @@ app.beginPress = function () {
   app.elStart.onclick = app.stopPress;
   
   app.lastFrame = window.performance.now();
-  
-  app.parseInputParticleCount();
-  
   app.generateInitialParticles(app.rain.max);
   
   if (app.elWebCL.hasAttribute('checked')) {
@@ -231,11 +190,6 @@ app.stopPress = function () {
   
   if (app.scriptNode) {
     app.scriptNode.disconnect();
-  }
-  if (app.clGetter.clCtx) {
-    window.setTimeout(function () {
-      app.clGetter.clCtx.releaseAll();
-    }, ((app.rain.timestep + 100) * 1000 / 44100));
   }
 };
 
@@ -270,12 +224,6 @@ app.unlockBegin = function () {
 
 app.firstDraw = function () {
   "use strict";
-  
-  app.elRain.width = app.elMap.clientWidth;
-  app.elRain.height = app.elMap.clientHeight;
-  app.gl.viewport(0, 0, app.gl.drawingBufferWidth, app.gl.drawingBufferHeight);
-  app.elBoid.width = app.elMap.clientWidth;
-  app.elBoid.height = app.elMap.clientHeight;
   
   app.boid.defineBoid();
   app.boid.draw();
@@ -341,7 +289,7 @@ app.generateInitialParticles = function (number) {
     cueSamples,
     cuePosition;
   
-  //app.rain.max = number;
+  app.rain.max = number;
   
   //Web Audio: AOS: {float x, float y, float life}
   //WebCL: AOS: {float x, float y, int32 sampleStart, int32 sampleEnd, int32 samplePosition}
@@ -500,8 +448,6 @@ app.setupKernel = function () {
   var cl;
   
   cl = app.clGetter.clCtx;
-  app.ioQueue = app.clGetter.clCtx.createCommandQueue(app.device);
-  app.cmdQueue = app.clGetter.clCtx.createCommandQueue(app.device);
   app.bufParticlesFloat = cl.createBuffer(window.WebCL.MEM_READ_ONLY, app.rain.webclCallsFloat.byteLength);
   app.bufParticlesInt = cl.createBuffer(window.WebCL.MEM_READ_ONLY, app.rain.webclCallsInt.byteLength);
   app.bufOutput = cl.createBuffer(window.WebCL.MEM_WRITE_ONLY, 8 * app.rain.timestep);
@@ -527,7 +473,7 @@ app.runKernel = function () {
   app.kernel.setArg(4, new window.Float32Array([(app.boid.location.x / app.elMap.clientWidth) * app.webclDistanceScale, (app.boid.location.y / app.elMap.clientHeight) * app.webclDistanceScale]));
   app.kernel.setArg(5, new window.Float32Array([app.boid.direction.x, app.boid.direction.y]));
   
-  //app.cmdQueue = cl.createCommandQueue(app.device);
+  app.cmdQueue = cl.createCommandQueue(app.device);
   app.cmdQueue.enqueueWriteBuffer(app.bufParticlesFloat, false, 0, app.rain.webclCallsFloat.byteLength, app.rain.webclFloatView);
   app.cmdQueue.enqueueWriteBuffer(app.bufParticlesInt, false, 0, app.rain.webclCallsInt.byteLength, app.rain.webclIntView);
   app.cmdQueue.enqueueWriteBuffer(app.bufSoundCues, false, 0, app.rain.samples.getChannelData(0).byteLength, app.rain.samples.getChannelData(0));
