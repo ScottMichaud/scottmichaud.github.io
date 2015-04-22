@@ -1,0 +1,67 @@
+@charset "utf-8";
+
+html, body{
+	padding: 0; margin: 0; background-color: #ddd;
+}
+
+#top {
+  top: 0px; width: calc(100% - 150px); height: 75px; position: absolute;
+  text-align: center; margin: auto; left: 0; right: 0;
+}
+
+#main {
+  left: 0; right: 0; top: 0; bottom: 0; margin: auto; position: absolute;
+  width: calc(100% - 150px); height: calc(100% - 150px); background-color: #fff;
+}
+
+#bottom {
+  bottom: 0px; width: 100%; height: 50px; text-align: center; position: absolute;
+}
+
+#webclDeviceSelector {
+  text-align: right; margin-top: 10px;
+}
+
+.upperOptions {
+  padding-top: 10px;
+}
+
+.lowerOptions {
+  
+}
+
+#topCenter {
+  display: inline-block;
+}
+
+#leftOptions {
+  float: left; margin-right: 70px; text-align: right;
+}
+
+#typeWebAudio {
+  margin-right: 25px;
+}
+
+#rightOptions {
+  float: left;
+}
+
+#startStop {
+  margin-top: 15px; width: 75px;
+}
+
+#inputParticleCount {
+  margin-left: 5px;
+  margin-right: 5px;
+  margin-top: 15px;
+  text-align: right;
+  width: 100px;
+}
+
+#glPoints {
+  width: 100%; height: 100%; position: absolute;
+}
+
+#boid {
+  width: 100%; height: 100%; position: absolute;
+}

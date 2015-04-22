@@ -31,91 +31,96 @@
     }
   </script>
   <script type="text/x-opencl" id="clMixSamples">
-    // Structure of Arrays
-    //
-    // f_particles: x then y of each particle
-    //
-    // i_particles: sampleStart then sampleEnd then interpPosition
-    //              for each particle's sample space.
-    //
-    // output: left then right
-    //
-    // soundCues: each source stacked, with sample. 
-    //
+    //typedef struct {
+    //  float2 pos;
+    //  int sampleStart;
+    //  int sampleEnd;
+    //  int samplePosition;
+    //} stParticle;
     
-    __kernel void clMixSamples(__global float* f_particles,
-                             __global int* i_particles,
-                             __global float* output,
+    // Particle Structure:
+    //
+    // pos: x, y coordinate of map. 0 to 1. (8 bytes)
+    //
+    // sampleStart: Added for multiple sounds, where this sound starts. (4 bytes)
+    // This can handle 13.5 hours of 44.1 kHz samples, per batch.
+    //
+    // sampleEnd: Stop at this index number. Same as above. (4 bytes).
+    // Wish I was using a uint32 but JavaScript doesn't like those.
+    // 13.5 hours is pretty good though.
+    //
+    // samplePosition: If negative, delay. If positive or 0, number of samples
+    // after sampleStart for start of this batch. (4 bytes).
+    //
+    // Total: 8 + 4 + 4 + 4 = 20 Bytes per struct
+    
+    __kernel void clMixSamples(__global float2* f_particles,
+                             __global int3* i_particles,
+                             __global float2* output,
                              __global float* soundCues,
                              float2 obsLocation,
                              float2 obsDirection,
                              int numParticles,
-                             int numCues)
+                             int numOutput)
   {
+      //output is float2 because it's stereo.
+      //numOutput is the number of samples in ONE channel of the resulting
+      //stream. Thus, because this is stereo, mentally double.
+
       int i = get_global_id(0); //Sample number
-      int itr = 0;
-      int numOutput = get_global_size(0);
-      
-      //Copy the lookup table to local memory.
-      //THIS IS ONLY APPLICABLE BECAUSE soundCues IS SMALL
-      //But that's OKAY. Depending on the performance we get, this
-      //optimization can let us do a multi-kernel run where we
-      //load chunks of soundCues buffer into local memory and
-      //use it to populate a sorted list of needed samples
-      //in global memory (if a lot of samples are reused).
-      
-      __local float _soundCues[3000];
-      for (itr = get_local_id(0); itr < numCues; itr += get_local_size(0))
-      {
-        _soundCues[itr] = soundCues[itr];
-      }
-      
-      barrier(CLK_LOCAL_MEM_FENCE);
-      
       if (i >= numOutput)
       {
           return;
       }
 
-      int isLeftEar = select(-1, 1, i > (numOutput / 2));
-      float SumOutput = 0.0f;
-      float2 EarDirection = isLeftEar * (float2)(-obsDirection.y, obsDirection.x);
+      float2 OutputValue = (float2)(0.0f, 0.0f);
+      float2 obsRight = (float2)(-obsDirection.y, obsDirection.x);
+      //It's normalized in boid.js, but what's one op among friends?
+      obsRight = normalize(obsRight);
       float2 CurrentDirection = (float2)(0.0f, 0.0f);
-      int CurrentSamplePosition = 0;
+      int CurrentPosition = 0;
       float CurrentSample = 0.0f;
-      float2 CurrentLocation = (float2)(0.0f, 0.0f);
       float SourceDistance = 0.0f;
-      float CurrentDistanceGain = 0.0f;
-      float CurrentBalance = 0.0f;
+      float CurrentGain = 0.0f;
+      float CurrentLeft = 0.0f;
+      float CurrentRight = 0.0f;
       
-      for (itr = 0; itr < numParticles; itr++)
+      for (int itr=0; itr < numParticles; itr++)
       {
-          CurrentSamplePosition = i_particles[itr + (2 * numParticles)] + i;
+          CurrentPosition = i_particles[itr].z + i;
           
-          if ((CurrentSamplePosition >= i_particles[itr]) &&
-              (CurrentSamplePosition < i_particles[itr + numParticles]))
+          if ((CurrentPosition >= i_particles[itr].x) &&
+              (CurrentPosition < i_particles[itr].y))
           {
-              CurrentSample = _soundCues[CurrentSamplePosition];
+              CurrentSample = soundCues[CurrentPosition] * 1000.f;
           
-              CurrentLocation = (float2)(f_particles[itr], f_particles[itr + numParticles]);
-              SourceDistance = distance(obsLocation, CurrentLocation);
-              SourceDistance = clamp(SourceDistance, 200.f, 1000.f);
-              CurrentDistanceGain = 200.f / SourceDistance;
+              SourceDistance = distance(obsLocation, f_particles[itr]);
+              SourceDistance = clamp(SourceDistance, 50.f, 1000.f);
+              CurrentGain = 50.f / SourceDistance;
 
-              CurrentDirection = CurrentLocation - obsLocation;
+              CurrentDirection = f_particles[itr] - obsLocation;
               CurrentDirection = normalize(CurrentDirection);
 
-              CurrentBalance = dot(CurrentDirection, EarDirection);
-              CurrentBalance += 1.0f;
-              CurrentBalance *= 0.5f;
-              CurrentBalance *= CurrentSample;
-              CurrentBalance *= CurrentDistanceGain;
-              
-              SumOutput += CurrentBalance;
+              CurrentLeft = dot(CurrentDirection, -obsRight);
+              CurrentLeft += 1.0f;
+              CurrentLeft *= 0.5f;
+              CurrentLeft *= CurrentSample;
+              CurrentLeft *= CurrentGain;
+
+              CurrentRight = dot(CurrentDirection, obsRight);
+              CurrentRight += 1.0f;
+              CurrentRight *= 0.5f;
+              CurrentRight *= CurrentSample;
+              CurrentRight *= CurrentGain;
+
+              OutputValue.x += CurrentLeft;
+              OutputValue.y += CurrentRight;
           }
       }
       
-      output[i] = SumOutput;
+      //output[i] = (float2)(0.01f, 0.01f);
+      //output[i] = (float2)(CurrentLeft, CurrentRight);
+      output[i] = OutputValue;
   }
   </script>
 </head>
