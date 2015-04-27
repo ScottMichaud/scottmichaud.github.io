@@ -64,10 +64,7 @@
       //use it to populate a sorted list of needed samples
       //in global memory (if a lot of samples are reused).
       
-      //Array size is baked in for simplicity. In real usage, it will be
-      //adjusted by JavaScript before the kernel is sent to the GPU compiler.
-      //That way, we can adjust for other variables, etc.
-      __local float _soundCues[4533];
+      __local float _soundCues[3000];
       for (itr = get_local_id(0); itr < numCues; itr += get_local_size(0))
       {
         _soundCues[itr] = soundCues[itr];
@@ -153,7 +150,6 @@
     </div>
   </div>
   <div id="main">
-    <div id="tinRoof"></div>
     <canvas id="glPoints"></canvas>
     <canvas id="boid"></canvas>
   </div>

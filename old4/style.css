@@ -58,11 +58,6 @@ html, body{
   width: 100px;
 }
 
-#tinRoof {
-  position: absolute; width: 200px; height: 300px; right: 300px; top: 200px;
-  background-color: darkcyan;
-}
-
 #glPoints {
   width: 100%; height: 100%; position: absolute;
 }
