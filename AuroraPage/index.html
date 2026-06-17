@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" type="text/css" href="moz.css" />
+    <script type="text/javascript" src="canvas.js"> </script>
+    <script id="workerGenSphVert" type="javascript/worker">
+      //Local storage of variables to be set by postMessage and sent back.
+      var latBands;
+      var longBands;
+      var r;
+      var cX;
+      var cY;
+      var cZ;
+      var vertCount = 0;
+      var aVerts;
+      
+      self.onmessage = function (e) {
+      	var aMessage = e.data.split(',');
+      	latBands = aMessage[0];
+      	longBands = aMessage[1];
+      	r = aMessage[2];
+      	cX = aMessage[3];
+      	cY = aMessage[4];
+      	cZ = aMessage[5];
+      	
+      	crunch();
+      }
+      
+      function crunch() {
+      	//select a triangle, find its vertices, loop.
+      	
+      	//This is (x,y,z) -> (z,x,y) from physics, b/c sphere is not on z-axis.
+      	//x = r*cos(angleUp)
+      	//y = r*sin(angleUp)*cos(angleOut)
+      	//z = r*sin(angleUp)*sin(angleOut)
+      	  	
+      	//angleUp == 0 -> pi == j * Math.PI / latBands;
+      	//angleOut == 0 -> 2pi == i * Math.PI / longBands;
+      	//outOff == angle between out pieces == Math.PI / longBands;
+      	//upOff == angle between up pieces == Math.PI / latBands;
+      	
+      	var angleUp;
+      	var angleOut;
+      	var outOff = Math.PI / longBands;
+      	var upOff = Math.PI / latBands;
+      	
+      	for (var i=0; i<longBands; i++) {   //pick peel
+      	  for (var j=0; j<latBands; j++) {  //pick tri/quad
+      	  	if (j === 0) {                  //it's a triangle, + pole
+      	  	  //Do + pole
+      	  	  aVerts += cX + r + ',' + cY + ',' + cZ + ',';      	  	  
+      	  	  //Do vertex on this band
+      	  	  aVerts += r * Math.cos(angleUp) + cX + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.cos(angleOut) + cY + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.sin(angleOut) + cZ + ',';
+      	  	  //Do vertex on next band
+      	  	  aVerts += r * Math.cos(angleUp) + cX + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.cos(outOff) + cY + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.sin(outOff) + cZ + ',';
+      	  	  //Increment number of vertices.
+      	  	  vertCount += 3;
+      	  	}
+      	  	else if (j === latBands - 1) {  //it's a triangle, - pole
+      	  	  //Do + pole
+      	  	  aVerts += cX + -(r) + ',' + cY + ',' + cZ + ',';      	  	  
+      	  	  //Do vertex on this band
+      	  	  aVerts += r * Math.cos(angleUp) + cX + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.cos(angleOut) + cY + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.sin(angleOut) + cZ + ',';
+      	  	  //Do vertex on next band
+      	  	  aVerts += r * Math.cos(angleUp) + cX + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.cos(outOff) + cY + ',';
+      	  	  aVerts += r * Math.sin(angleUp) * Math.sin(outOff) + cZ;
+      	  	  //Increment number of vertices.
+      	  	  vertCount += 3;      	  	  
+      	  	  if (i !== longBands - 1) { //add ',' unless last value of i and j
+      	  	  	aVerts += ',';
+      	  	  }
+      	  	}
+      	  	else { //it's a quad.
+      	  	  //Do triangle: normal,normal: normal,offset: offset,offset
+      	  	  aVerts +=
+      	  	  
+      	  	  //Do triangle: normal,offset: offset, offset: offset, normal
+      	  	  aVerts += 
+      	  	  
+      	  	  vertCount += 6;
+      	  	}
+      	  }
+      	}
+      }
+    </script>
+    <script id="workerGenSphNorm" type="javascript/worker">
+      
+    </script>
+    <script id="workerGenSphUV" type="javascript/worker">
+      
+    </script>
+    <script id="vertex-shader-connectstream" type="x-shader/x-vertex">
+      
+    </script>
+    <script id="fragment-shader-connectstream" type="x-shader/x-fragment">
+      
+    </script>
+    <script id="vertex-shader-lightpoint" type="x-shader/x-vertex">
+      
+    </script>
+    <script id="fragment-shader-lightpoint" type="x-shader/x-fragment">
+      
+    </script>
+    <script id="vertex-shader-sun" type="x-shader/x-vertex">
+      
+    </script>
+    <script id="fragment-shader-sun" type="x-shader/x-fragment">
+      
+    </script>
+    <script id="vertex-shader-globe" type="x-shader/x-vertex">
+      
+    </script>
+    <script id="fragment-shader-globe" type="x-shader/x-fragment">
+      
+    </script>
+    <script id="vertex-shader-aurora" type="x-shader/x-vertex">
+      precision lowp float;
+      attribute vec2 pos;
+      void main() {
+
+        gl_Position = vec4( pos, 0.0, 1.0 );
+
+      }
+    </script>
+    <script id="fragment-shader-aurora" type="x-shader/x-fragment">
+      precision lowp float;
+      uniform vec2 res;
+      uniform float time;
+      uniform float samples;
+      float pi=3.14159;
+      float speed=0.5*time;
+      float skew=0.14;
+
+      float rescor = res.x/1600.0/samples;
+
+
+      vec3 getShade(float pos)
+      {
+        float shade = 0.55;
+        shade = shade + 0.1*cos(rescor*13.0*pi*pos + -1.2*speed);
+        shade = shade + -0.15*cos(rescor*38.4*pi*pos + 0.4*speed);
+        shade = shade + -0.15*cos(rescor*68.4*pi*pos + -0.3*speed);
+        shade = shade + 0.11*cos(rescor*150.4*pi*pos + 2.6*speed);
+        shade = shade + -0.11*cos(rescor*300.4*pi*pos + 0.4*speed);
+        shade = shade + 0.1*cos(rescor*3.4*pi*pos - 1.0*speed);
+
+        return vec3(shade);
+      }
+
+      void main(void)
+      {
+        vec2 p = gl_FragCoord.xy / res.xy;
+        p.x = p.x + skew * -p.y * cos(pi*p.x) + 0.5;
+        p.y = 1.27*p.y;
+        p.y = p.y + 0.27*cos(pi*p.x);
+        p.y = p.y + 0.05*cos(rescor*0.15*pi*p.x*cos(speed) + -0.4*speed);
+        p.y = p.y + 0.035*cos(rescor*0.3*pi*p.x + -0.7*speed);		
+        p.y = p.y - 0.045*cos(rescor*1.4*pi*p.x + 0.5*speed);
+        p.y = p.y + 0.035*cos(rescor*3.4*pi*p.x - 0.23*speed);
+        p.y = p.y - 0.03*cos(rescor*4.8*pi*p.x + 0.9*speed);
+        p.y = p.y - 0.03*cos(rescor*6.8*pi*p.x - 1.3*speed);
+
+        vec3 shade = getShade(p.x);
+        
+        vec3 col = 2.0*shade*vec3(cos(-1.6*pi*(p.x+0.8))+0.5, 
+        0.7*cos(-1.6*pi*(p.x+0.8) + 0.66*pi)+0.5, 
+        0.5*cos(-1.6*pi*(p.x+0.8) + 1.15*pi)+0.5);
+
+        if(0.45*shade.r > abs(p.y-0.5))
+        {
+          col=col * (0.43*shade.r - abs(p.y-0.5));
+          col = col + pow((0.83*shade.r - abs(p.y-0.5)),8.7);
+        }
+        else {
+          col = vec3(0.0,0.0,0.0);
+        }
+
+        gl_FragColor = vec4(col,1.0);
+      }
+    </script>
+    <title>Mozilla Test Page</title>
+
+  </head>
+	
+  <body onload="useWebGL();">
+    <div id="canvas" style="position:fixed; width:100%; height:100%;">
+      <canvas id="c" style="width:100%;height:100%;">		
+      </canvas>
+    </div>
+  </body>
+</html>
